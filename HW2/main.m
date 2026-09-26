@@ -10,51 +10,8 @@ LINE_WIDTH = 0.1;
 FIGURE_WIDTH = 3000;
 FIGURE_HEIGHT = 2000;
 
-points = [1, 5, 9, 13];%try [1, 67, 71, 75, 79];
-
-%function
-function [frequency, amplitude] = DFT(data, delta_t)
-    f = data;
-    N = size(data(:));
-    N = N(1);
-    frequency = zeros(N, 1);
-    amplitude = zeros(N, 1);
-    idx = 1;
-
-    for n = 0 : 1 : (N / 2 - 1)
-        frequency(idx) = n / (N * delta_t);
-        
-        F = 0;
-        for k = 0 : (N - 1)
-            F = F + (f(k + 1) * exp(((-1i) * 2 * pi * n * k)/N)); 
-        end
-
-        amplitude(idx) = F;
-
-        idx = idx + 1;
-    end
-end
-
-function ma = movingAverage(data, point)
-    sizeofData = size(data);
-    sizeofData = sizeofData(1);
-    margin = floor(point / 2);
-    
-    ma = [];
-    
-    for i = 1 : sizeofData
-        if((i <= margin) || (i > (sizeofData - margin)))
-            continue;
-        end
-    
-        sum = 0;
-        for j = (i - margin) : (i + margin)
-            sum = sum + data(j);
-        end
-    
-        ma(end + 1) = sum / point;
-    end
-end
+points = [1, 5, 9, 13];
+%points = [1, 501, 511, 521, 531];
 
 %read data
 data = readtable(FILE_NAME);
@@ -64,72 +21,57 @@ sizeofData = sizeofData(1);
 %handle data
 sunspotNum = data.Var4;
 period = datetime(data.Var1, data.Var2, 1);
-T = [];
+T = zeros(1, length(points));
+T_idx = 1;
 
-%compare fft and dft
+%compare og, ma and fft
 figure;
-t = tiledlayout(3, 1);
+t = tiledlayout(length(points), 2);
 t.TileSpacing = "compact";
 t.Padding = "loose";
 
-%%og data
-nexttile;
+for point = points
+    %ma
+    nexttile;
+    
+    margin = floor(point / 2);
+    filter = [];
+    for i = 1:point
+        filter(end + 1) = 1 / i;
+    end
+    x = period((margin + 1) : (end - margin));
+    y = conv(sunspotNum(:), filter, "valid");
+    
+    plot(x(:), y(:), LineWidth = LINE_WIDTH);
+    grid on;
+    xlabel("Time(Month)");
+    ylabel("Sunspots");
+    title(point + "-MA Sumspots Number");
+    
+    
+    %fft
+    nexttile;
 
-x = period(:);
-y = sunspotNum(:);
+    N = length(y);
+    x = ((-N / 2) : (N / 2 - 1)) / (DELTA_T * N);
+    y = abs(fftshift(fft(y - mean(y))));
 
-plot(x(:), y(:), LineWidth = LINE_WIDTH);
-xlabel("Time(Month)");
-ylabel("Sunspots");
-title("Original Data");
-grid on;
-
-%%dft
-nexttile;
-
-[x, y] = DFT((sunspotNum - mean(sunspotNum)), DELTA_T);
-y = abs(y);
-
-[val, idx] = max(y(:));
-disp("T =");
-disp(abs((1 / x(idx)) / 12));
-
-plot(x(:), y(:), LineWidth = LINE_WIDTH);
-xlim([0, abs(10 * x(idx))]);
-xlabel("Freqency(1/Month)");
-ylabel("Amplitude");
-title("FFT of OG Data Using DFT()");
-grid on;
-
-%%fft
-nexttile;
-
-N = sizeofData;
-x = [];
-y = [];
-
-for n = (-N/2) : 1 : (N / 2 - 1)
-    x(end + 1) = n / (N * DELTA_T);
+    [val, idx] = max(y(:));
+    T(T_idx) = abs((1 / (x(idx))) / 12);
+    
+    plot(x(:), y(:), LineWidth = LINE_WIDTH);
+    grid on;
+    xlim([-0.035, 0.035]);
+    xlabel("Frequency");
+    ylabel("Magnitude");
+    title("Spectrum of " + point + "-MA Sumspots Number (T=" + T(T_idx) + "years)");
+    T_idx = T_idx + 1;
 end
 
-y = abs(fftshift(fft(sunspotNum - mean(sunspotNum))));
-
-[val, idx] = max(y(:));
-disp("T =");
-disp(abs((1 / x(idx)) / 12));
-
-plot(x(:), y(:), LineWidth = LINE_WIDTH);
-xlim([0, abs(10 * x(idx))]);
-xlabel("Freqency(1/Month)");
-ylabel("Amplitude");
-title("FFT of OG Data Using fftshift(fft())");
-grid on;
-
-%%save
+%save
 saveas(gcf, "Figure1.png");
-close;
 
-%compare different ma
+%compare system response
 figure;
 t = tiledlayout(length(points), 1);
 t.TileSpacing = "compact";
@@ -137,51 +79,35 @@ t.Padding = "loose";
 
 for point = points
     nexttile;
-
-    ma = movingAverage(sunspotNum, point);
-
-    [x, y] = DFT((ma - mean(ma)), point);
-    y = abs(y);
-
-    [val, idx] = max(y(:));
-    disp("T =");
-    T(end + 1) = abs((1 / (point * x(idx))) / 12);
-    disp(T(end));
+    
+    filter = [];
+    for i = 1:point
+        filter(end + 1) = 1 / i;
+    end
+    
+    N = sizeofData;
+    x = ((-N / 2) : (N / 2 - 1)) / (DELTA_T * N);
+    y = abs(fftshift(fft(filter, length(x))));
     
     plot(x(:), y(:), LineWidth = LINE_WIDTH);
-    xlim([0, max([abs(-10 * x(idx)), 1e-3])]);
-    xlabel("Freqency(1/" + point + " Month)");
-    ylabel("Amplitude");
-    title("FFT of " + point + "-Points Moving Average of Sunspots (T = " + T(end)+" years)");
     grid on;
+    xlabel("Frequency");
+    ylabel("Magnitude");
+    title(point + "-Point Filter System Response");
+    
 end
 
-%%save
+%save
 saveas(gcf, "Figure2.png");
-close;
 
-
-
-%show T for different points
+%compare diff T of diff ma
 figure;
-
-hold on;
-x = points(:);
-y = T;
-
-plot(x(:), y(:), "-o", LineWidth = 3);
-
-%p = polyfit(x, y, 1);
-%yfit = polyval(p, x);
-%plot(x, yfit);
-
-hold off;
-
-xlabel("Points");
-ylabel("Period");
-title("Periods of Different Points of MA");
-legend(["Periods", "Regression"])
+plot(points, T);
 grid on;
+xlim([min(points), max(points)]);
+xlabel("Points");
+ylabel("T");
+title("Period of Sumspots of Different Points MA");
 
+%save
 saveas(gcf, "Figure3.png");
-close;
