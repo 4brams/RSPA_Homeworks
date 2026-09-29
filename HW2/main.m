@@ -11,103 +11,77 @@ FIGURE_WIDTH = 3000;
 FIGURE_HEIGHT = 2000;
 
 points = [1, 5, 9, 13];
-%points = [1, 501, 511, 521, 531];
+%points = 1:10:2001;
+%points = [1, 49, 299, 699];
+T = [];
 
-%read data
-data = readtable(FILE_NAME);
-sizeofData = size(data);
-sizeofData = sizeofData(1);
+%main
+fig1 = figure("Position", [0, 0, FIGURE_WIDTH, FIGURE_HEIGHT]);
+hold on;
+fig2 = figure;
+hold on;
 
-%handle data
-sunspotNum = data.Var4;
-period = datetime(data.Var1, data.Var2, 1);
-T = zeros(1, length(points));
-T_idx = 1;
+[sunspotNum, period, sizeofData] = readData(FILE_NAME);
 
-%compare og, ma and fft
-figure;
-t = tiledlayout(length(points), 2);
-t.TileSpacing = "compact";
-t.Padding = "loose";
-
+idx = 0;
 for point = points
-    %ma
-    nexttile;
-    
-    margin = floor(point / 2);
-    filter = [];
-    for i = 1:point
-        filter(end + 1) = 1 / i;
-    end
-    x = period((margin + 1) : (end - margin));
-    y = conv(sunspotNum(:), filter, "valid");
-    
-    plot(x(:), y(:), LineWidth = LINE_WIDTH);
+    [t, f, sunspotMA, sunspotSpectrum, filterSystemResponse, T(end + 1)] = processData(sunspotNum, period, point, DELTA_T);
+
+    figure(fig1);
+
+    subplot(length(points), 3, idx * 3 + 1);
+    plot(t, sunspotMA, LineWidth = LINE_WIDTH);
     grid on;
+    xlim([min(t), max(t)]);
     xlabel("Time(Month)");
     ylabel("Sunspots");
     title(point + "-MA Sumspots Number");
-    
-    
-    %fft
-    nexttile;
 
-    N = length(y);
-    x = ((-N / 2) : (N / 2 - 1)) / (DELTA_T * N);
-    y = abs(fftshift(fft(y - mean(y))));
-
-    [val, idx] = max(y(:));
-    T(T_idx) = abs((1 / (x(idx))) / 12);
-    
-    plot(x(:), y(:), LineWidth = LINE_WIDTH);
+    subplot(length(points), 3, idx * 3 + 2);
+    plot(f, sunspotSpectrum, LineWidth = LINE_WIDTH);
     grid on;
     xlim([-0.035, 0.035]);
     xlabel("Frequency");
     ylabel("Magnitude");
-    title("Spectrum of " + point + "-MA Sumspots Number (T=" + T(T_idx) + "years)");
-    T_idx = T_idx + 1;
-end
+    title("Spectrum of " + point + "-MA Sumspots Number (T=" + T(end) + "years)");
 
-%save
-saveas(gcf, "Figure1.png");
-
-%compare system response
-figure;
-t = tiledlayout(length(points), 1);
-t.TileSpacing = "compact";
-t.Padding = "loose";
-
-for point = points
-    nexttile;
-    
-    filter = [];
-    for i = 1:point
-        filter(end + 1) = 1 / i;
-    end
-    
-    N = sizeofData;
-    x = ((-N / 2) : (N / 2 - 1)) / (DELTA_T * N);
-    y = abs(fftshift(fft(filter, length(x))));
-    
-    plot(x(:), y(:), LineWidth = LINE_WIDTH);
+    subplot(length(points), 3, idx * 3 + 3);
+    plot(f, filterSystemResponse, LineWidth = LINE_WIDTH);
     grid on;
     xlabel("Frequency");
     ylabel("Magnitude");
     title(point + "-Point Filter System Response");
-    
+
+    figure(fig2);
+
+    subplot(length(points), 1, idx + 1);
+    yyaxis left;
+    plot(f, sunspotSpectrum)
+    grid on;
+    ylabel('Sunspot');
+    yyaxis right;
+    plot(f, filterSystemResponse)
+    grid on;
+    ylim([0, 8]);
+    ylabel('SystemResponse');
+    xlabel("Frequency");
+    xlim([-0.1, 0.1]);
+    title(point + "-Point Spectrum and SR(T=" + T(end) + "years)");
+
+    idx = idx + 1;
+
+    disp(point);
 end
 
-%save
-saveas(gcf, "Figure2.png");
-
-%compare diff T of diff ma
-figure;
+fig3 = figure;
 plot(points, T);
-grid on;
 xlim([min(points), max(points)]);
+grid on;
 xlabel("Points");
-ylabel("T");
-title("Period of Sumspots of Different Points MA");
+ylabel("Period");
+title("Period of Different Points");
 
 %save
-saveas(gcf, "Figure3.png");
+saveas(fig1, "Figure1.png");
+saveas(fig2, "Figure2.png");
+saveas(fig3, "Figure3.png");
